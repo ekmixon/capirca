@@ -43,48 +43,33 @@ class Term(aclgenerator.Term):
   def __str__(self):
     # Verify platform specific terms. Skip whole term if platform does not
     # match.
-    if self.term.platform:
-      if 'demo' not in self.term.platform:
-        return ''
-    if self.term.platform_exclude:
-      if 'demo' in self.term.platform_exclude:
-        return ''
+    if self.term.platform and 'demo' not in self.term.platform:
+      return ''
+    if self.term.platform_exclude and 'demo' in self.term.platform_exclude:
+      return ''
 
-    ret_str = []
-
-    # NAME
-    ret_str.append(' ' * 4 + 'Term: '+self.term.name+'{')
+    ret_str = [' ' * 4 + 'Term: '+self.term.name + '{']
 
     # COMMENTS
     if self.term.comment:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + '#COMMENTS')
+      ret_str.extend((' ', ' ' * 8 + '#COMMENTS'))
       for comment in self.term.comment:
-        for line in comment.split('\n'):
-          ret_str.append(' ' * 8 + '#'+line)
-
+        ret_str.extend(' ' * 8 + '#'+line for line in comment.split('\n'))
     # SOURCE ADDRESS
     source_address = self.term.GetAddressOfVersion(
         'source_address', self.AF_MAP.get(self.term_type))
     source_address_exclude = self.term.GetAddressOfVersion(
         'source_address_exclude', self.AF_MAP.get(self.term_type))
     if source_address:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Source IP\'s')
-      for saddr in source_address:
-        ret_str.append(' ' * 8 + str(saddr))
-
+      ret_str.extend((' ', ' ' * 8 + 'Source IP\'s'))
+      ret_str.extend(' ' * 8 + str(saddr) for saddr in source_address)
     # SOURCE ADDRESS EXCLUDE
     if source_address_exclude:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Excluded Source IP\'s')
-      for ex in source_address:
-        ret_str.append(' ' * 8 + str(ex))
-
+      ret_str.extend((' ', ' ' * 8 + 'Excluded Source IP\'s'))
+      ret_str.extend(' ' * 8 + str(ex) for ex in source_address)
     # SOURCE PORT
     if self.term.source_port:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Source ports')
+      ret_str.extend((' ', ' ' * 8 + 'Source ports'))
       ret_str.append(' ' * 8 + self._Group(self.term.source_port))
 
     # DESTINATION
@@ -93,37 +78,26 @@ class Term(aclgenerator.Term):
     destination_address_exclude = self.term.GetAddressOfVersion(
         'destination_address_exclude', self.AF_MAP.get(self.term_type))
     if destination_address:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Destination IP\'s')
-      for daddr in destination_address:
-        ret_str.append(' ' * 8 + str(daddr))
-
+      ret_str.extend((' ', ' ' * 8 + 'Destination IP\'s'))
+      ret_str.extend(' ' * 8 + str(daddr) for daddr in destination_address)
     # DESINATION ADDRESS EXCLUDE
     if destination_address_exclude:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Excluded Destination IP\'s')
-      for ex in destination_address_exclude:
-        ret_str.append(' ' * 8 + str(ex))
-
+      ret_str.extend((' ', ' ' * 8 + 'Excluded Destination IP\'s'))
+      ret_str.extend(' ' * 8 + str(ex) for ex in destination_address_exclude)
     # DESTINATION PORT
     if self.term.destination_port:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Destination Ports')
+      ret_str.extend((' ', ' ' * 8 + 'Destination Ports'))
       ret_str.append(' ' * 8 + self._Group(self.term.destination_port))
 
     # PROTOCOL
     if self.term.protocol:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Protocol')
+      ret_str.extend((' ', ' ' * 8 + 'Protocol'))
       ret_str.append(' ' * 8 + self._Group(self.term.protocol))
 
     # OPTION
     if self.term.option:
-      ret_str.append(' ')
-      ret_str.append(' ' * 8 + 'Options')
-      for option in self.term.option:
-        ret_str.append(' ' * 8 + option)
-
+      ret_str.extend((' ', ' ' * 8 + 'Options'))
+      ret_str.extend(' ' * 8 + option for option in self.term.option)
     # ACTION
     for action in self.term.action:
       ret_str.append(' ')
@@ -188,10 +162,7 @@ class Demo(aclgenerator.ACLGenerator):
         continue
       filter_options = header.FilterOptions('demo')
       filter_name = filter_options[0]
-      if len(filter_options) > 1:
-        interface_specific = filter_options[1]
-      else:
-        interface_specific = 'none'
+      interface_specific = filter_options[1] if len(filter_options) > 1 else 'none'
       filter_type = 'inet'
       term_names = set()
       new_terms = []
@@ -215,18 +186,16 @@ class Demo(aclgenerator.ACLGenerator):
     target = []
     for (header, filter_name, filter_type,
          interface_specific, terms) in self.demo_policies:
-      target.append('Header {')
-      target.append(' ' * 4 + 'Name: %s {' % filter_name)
-      target.append(' ' * 8 + 'Type: %s ' % filter_type)
+      target.extend((
+          'Header {',
+          ' ' * 4 + 'Name: %s {' % filter_name,
+          ' ' * 8 + f'Type: {filter_type} ',
+      ))
       for comment in header.comment:
-        for line in comment.split('\n'):
-          target.append(' ' * 8 + 'Comment: %s'%line)
-      target.append(' ' * 8 + 'Family type: %s'%interface_specific)
-      target.append(' ' * 4 +'}')
+        target.extend(' ' * 8 + f'Comment: {line}' for line in comment.split('\n'))
+      target.extend((' ' * 8 + f'Family type: {interface_specific}', ' ' * 4 +'}'))
       for term in terms:
-        target.append(str(term))
-        target.append(' ' * 4 +'}')
-        target.append(' ')
+        target.extend((str(term), ' ' * 4 +'}', ' '))
       target.append('}')
     return '\n'.join(target)
 

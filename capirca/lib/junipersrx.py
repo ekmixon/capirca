@@ -32,7 +32,7 @@ ICMP_TERM_LIMIT = 8
 
 
 def JunipersrxList(name, data):
-  return '%s [ %s ];' % (name, ' '.join(data))
+  return f"{name} [ {' '.join(data)} ];"
 
 
 class Error(Exception):
@@ -78,7 +78,7 @@ class IndentList(list):
     super().__init__(*args, **kwargs)
 
   def IndentAppend(self, size, data):
-    self.append('%s%s' % (self._indent * size, data))
+    self.append(f'{self._indent * size}{data}')
 
 
 class Term(aclgenerator.Term):
@@ -113,18 +113,16 @@ class Term(aclgenerator.Term):
     """Render config output from this term object."""
     # Verify platform specific terms. Skip whole term if platform does not
     # match.
-    if self.term.platform:
-      if 'srx' not in self.term.platform:
-        return ''
-    if self.term.platform_exclude:
-      if 'srx' in self.term.platform_exclude:
-        return ''
+    if self.term.platform and 'srx' not in self.term.platform:
+      return ''
+    if self.term.platform_exclude and 'srx' in self.term.platform_exclude:
+      return ''
     ret_str = IndentList(JuniperSRX.INDENT)
 
     # COMMENTS
     comment_max_width = 68
     if self.term.owner and self.verbose:
-      self.term.comment.append('Owner: %s' % self.term.owner)
+      self.term.comment.append(f'Owner: {self.term.owner}')
     comments = aclgenerator.WrapWords(self.term.comment, comment_max_width)
     if comments and comments[0] and self.verbose:
       ret_str.IndentAppend(3, '/*')
@@ -132,13 +130,11 @@ class Term(aclgenerator.Term):
         ret_str.IndentAppend(3, line)
       ret_str.IndentAppend(3, '*/')
 
-    ret_str.IndentAppend(3, 'policy ' + self.term.name + ' {')
+    ret_str.IndentAppend(3, f'policy {self.term.name}' + ' {')
     ret_str.IndentAppend(4, 'match {')
     # SOURCE-ADDRESS
     if self.term.source_address:
-      saddr_check = set()
-      for saddr in self.term.source_address:
-        saddr_check.add(saddr.parent_token)
+      saddr_check = {saddr.parent_token for saddr in self.term.source_address}
       saddr_check = sorted(saddr_check)
       ret_str.IndentAppend(5, JunipersrxList('source-address', saddr_check))
     else:
@@ -146,12 +142,9 @@ class Term(aclgenerator.Term):
 
     # DESTINATION-ADDRESS
     if self.term.destination_address:
-      daddr_check = []
-      for daddr in self.term.destination_address:
-        daddr_check.append(daddr.parent_token)
+      daddr_check = [daddr.parent_token for daddr in self.term.destination_address]
       daddr_check = set(daddr_check)
-      daddr_check = list(daddr_check)
-      daddr_check.sort()
+      daddr_check = sorted(daddr_check)
       ret_str.IndentAppend(5, JunipersrxList('destination-address',
                                              daddr_check))
     else:
@@ -161,12 +154,11 @@ class Term(aclgenerator.Term):
     if (not self.term.source_port and not self.term.destination_port and not
         self.term.icmp_type and not self.term.protocol):
       ret_str.IndentAppend(5, 'application any;')
+    elif hasattr(self.term, 'replacement_application_name'):
+      ret_str.IndentAppend(5, 'application ' +
+                           self.term.replacement_application_name + '-app;')
     else:
-      if hasattr(self.term, 'replacement_application_name'):
-        ret_str.IndentAppend(5, 'application ' +
-                             self.term.replacement_application_name + '-app;')
-      else:
-        ret_str.IndentAppend(5, 'application ' + self.term.name + '-app;')
+      ret_str.IndentAppend(5, f'application {self.term.name}-app;')
 
     # DSCP MATCH
     if self.term.dscp_match:
@@ -188,18 +180,18 @@ class Term(aclgenerator.Term):
         ret_str.IndentAppend(5, self.ACTIONS.get(
             str(action)) + ' {')
         ret_str.IndentAppend(6, 'tunnel {')
-        ret_str.IndentAppend(7, 'ipsec-vpn %s;' % self.term.vpn[0])
+        ret_str.IndentAppend(7, f'ipsec-vpn {self.term.vpn[0]};')
         if self.term.vpn[1]:
-          ret_str.IndentAppend(7, 'pair-policy %s;' % self.term.vpn[1])
+          ret_str.IndentAppend(7, f'pair-policy {self.term.vpn[1]};')
 
         ret_str.IndentAppend(6, '}')
         ret_str.IndentAppend(5, '}')
       else:
-        ret_str.IndentAppend(5, self.ACTIONS.get(str(action)) + ';')
+        ret_str.IndentAppend(5, f'{self.ACTIONS.get(str(action))};')
 
       # DSCP SET
       if self.term.dscp_set:
-        ret_str.IndentAppend(5, 'dscp ' + self.term.dscp_set + ';')
+        ret_str.IndentAppend(5, f'dscp {self.term.dscp_set};')
 
       # LOGGING
       if self.term.logging:
@@ -208,11 +200,10 @@ class Term(aclgenerator.Term):
           if str(log_target) == 'log-both':
             ret_str.IndentAppend(6, 'session-init;')
             ret_str.IndentAppend(6, 'session-close;')
+          elif str(action) == 'accept':
+            ret_str.IndentAppend(6, 'session-close;')
           else:
-            if str(action) == 'accept':
-              ret_str.IndentAppend(6, 'session-close;')
-            else:
-              ret_str.IndentAppend(6, 'session-init;')
+            ret_str.IndentAppend(6, 'session-init;')
         ret_str.IndentAppend(5, '}')
 
       ret_str.IndentAppend(4, '}')
@@ -256,7 +247,7 @@ class Term(aclgenerator.Term):
     if len(group) > 1:
       rval = '[ ' + ' '.join([_FormattedGroup(x) for x in group]) + ' ];'
     else:
-      rval = _FormattedGroup(group[0]) + ';'
+      rval = f'{_FormattedGroup(group[0])};'
     return rval
 
 

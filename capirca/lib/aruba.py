@@ -78,60 +78,54 @@ class Term(aclgenerator.Term):
     term_af = self.AF_MAP.get(self.filter_type)
 
     if self.term.verbatim:
-      for next_verbatim in self.term.verbatim:
-        if next_verbatim[0] == _PLATFORM and next_verbatim[1]:
-          ret_str.append('%s%s' % (self._IDENT, next_verbatim[1]))
-
+      ret_str.extend(f'{self._IDENT}{next_verbatim[1]}'
+                     for next_verbatim in self.term.verbatim
+                     if next_verbatim[0] == _PLATFORM and next_verbatim[1])
       return '\n'.join(t for t in ret_str if t)
     if self.verbose:
       comments = self.term.comment[:]
 
       if self.term.owner:
-        comments.append('Owner: %s' % self.term.owner)
+        comments.append(f'Owner: {self.term.owner}')
 
       if comments:
-        for line in aclgenerator.WrapWords(comments,
-                                           self._COMMENT_LINE_LENGTH):
-          ret_str.append('%s%s %s' % (self._IDENT, _COMMENT_MARKER, line))
-
+        ret_str.extend(f'{self._IDENT}{_COMMENT_MARKER} {line}'
+                       for line in aclgenerator.WrapWords(
+                           comments, self._COMMENT_LINE_LENGTH))
     src_addr_token = ''
     dst_addr_token = ''
 
     if self._SOURCE_IS_USER_OPT_STR in self.term.option:
       src_addr_token = self._USER_STR
+    elif self.term.source_address:
+      src_addr = self.term.GetAddressOfVersion('source_address',
+                                               term_af)
+      if not src_addr:
+        return ''
+
+      src_netdest_id = f'{self.term.name.lower()}{self._SRC_NETDEST_SUF}'
+      src_addr_token = f'{self._ALIAS_STR} {src_netdest_id}'
+      netdestinations.append(self._GenerateNetdest(src_netdest_id,
+                                                   src_addr,
+                                                   term_af))
+
     else:
-      if self.term.source_address:
-        src_addr = self.term.GetAddressOfVersion('source_address',
-                                                 term_af)
-        if not src_addr:
-          return ''
-
-        src_netdest_id = '%s%s' % (self.term.name.lower(),
-                                   self._SRC_NETDEST_SUF)
-        src_addr_token = '%s %s' % (self._ALIAS_STR, src_netdest_id)
-        netdestinations.append(self._GenerateNetdest(src_netdest_id,
-                                                     src_addr,
-                                                     term_af))
-
-      else:
-        src_addr_token = self._ANY_STR
+      src_addr_token = self._ANY_STR
 
     if self._DESTINATION_IS_USER_OPT_STR in self.term.option:
       dst_addr_token = self._USER_STR
-    else:
-      if self.term.destination_address:
-        dst_addr = self.term.GetAddressOfVersion('destination_address', term_af)
-        if not dst_addr:
-          return ''
+    elif self.term.destination_address:
+      dst_addr = self.term.GetAddressOfVersion('destination_address', term_af)
+      if not dst_addr:
+        return ''
 
-        dst_netdest_id = '%s%s' % (self.term.name.lower(),
-                                   self._DST_NETDEST_SUF)
-        dst_addr_token = '%s %s' % (self._ALIAS_STR, dst_netdest_id)
-        netdestinations.append(self._GenerateNetdest(dst_netdest_id,
-                                                     dst_addr,
-                                                     term_af))
-      else:
-        dst_addr_token = self._ANY_STR
+      dst_netdest_id = f'{self.term.name.lower()}{self._DST_NETDEST_SUF}'
+      dst_addr_token = f'{self._ALIAS_STR} {dst_netdest_id}'
+      netdestinations.append(self._GenerateNetdest(dst_netdest_id,
+                                                   dst_addr,
+                                                   term_af))
+    else:
+      dst_addr_token = self._ANY_STR
 
     dst_protocol_list = []
     if self.term.protocol:
@@ -149,11 +143,12 @@ class Term(aclgenerator.Term):
       if term_af == 6:
         str_tok.append(self._IPV6_START_STR)
 
-      str_tok.append(src_addr_token)
-      str_tok.append(dst_addr_token)
-
-      str_tok.append(dst_port)
-      str_tok.append(self._ACTIONS.get(self.term.action[0]))
+      str_tok.extend((
+          src_addr_token,
+          dst_addr_token,
+          dst_port,
+          self._ACTIONS.get(self.term.action[0]),
+      ))
       ret_str.append(' '.join(t for t in str_tok if t))
 
     self.netdestinations = netdestinations
@@ -170,18 +165,12 @@ class Term(aclgenerator.Term):
     Returns:
       A text block suitable for netdestinations in Aruba ACLs.
     """
-    ret_str = []
-
     # Aruba does not use IP version identifier for IPv4.
     addr_family = '6' if af == 6 else ''
 
-    ret_str.append('%s %s' % (self._NET_DEST_STR + addr_family,
-                              addr_netdestid))
-
-    for address in addresses:
-      ret_str.append('%s%s' % (self._IDENT,
-                               self._GenerateNetworkOrHostTokens(address)))
-
+    ret_str = [f'{self._NET_DEST_STR + addr_family} {addr_netdestid}']
+    ret_str.extend(f'{self._IDENT}{self._GenerateNetworkOrHostTokens(address)}'
+                   for address in addresses)
     ret_str.append('%s\n' % _TERMINATOR_MARKER)
 
     return '\n'.join(t for t in ret_str if t)
@@ -196,16 +185,12 @@ class Term(aclgenerator.Term):
       Aruba ACLs.
     """
     if address.num_addresses == 1:
-      return '%s %s' % (self._HOST_STRING, address.network_address)
+      return f'{self._HOST_STRING} {address.network_address}'
 
     if address.version == 6:
-      return '%s %s/%s' % (self._NETWORK_STRING,
-                           address.network_address,
-                           address.prefixlen)
+      return f'{self._NETWORK_STRING} {address.network_address}/{address.prefixlen}'
 
-    return '%s %s %s' % (self._NETWORK_STRING,
-                         address.network_address,
-                         address.netmask)
+    return f'{self._NETWORK_STRING} {address.network_address} {address.netmask}'
 
   def _GeneratePortTokens(self, protocols, ports):
     """Generates string tokens for ports.
@@ -222,11 +207,10 @@ class Term(aclgenerator.Term):
       if protocol in self._PROTOCOL_MAP:
         return [str(self._PROTOCOL_MAP[protocol])]
 
-      for start_port, end_port in ports:
-        ret_ports.append('%s %s' %
-                         (protocol.lower(), ' '.join(
-                             str(x) for x in set([start_port, end_port]))))
-
+      ret_ports.extend(('%s %s' % (
+          protocol.lower(),
+          ' '.join(str(x) for x in {start_port, end_port}),
+      )) for start_port, end_port in ports)
     return ret_ports
 
 
@@ -314,7 +298,7 @@ class Aruba(aclgenerator.ACLGenerator):
   def __str__(self):
     target = []
 
-    target.extend(aclgenerator.AddRepositoryTags('%s ' % _COMMENT_MARKER))
+    target.extend(aclgenerator.AddRepositoryTags(f'{_COMMENT_MARKER} '))
 
     for filter_name, terms, _ in self.aruba_policies:
       netdestinations = []
@@ -325,7 +309,7 @@ class Aruba(aclgenerator.ACLGenerator):
         netdestinations.extend(term.netdestinations)
 
       target.extend(netdestinations)
-      target.append('%s %s' % (self._ACL_LINE_HEADER, filter_name))
+      target.append(f'{self._ACL_LINE_HEADER} {filter_name}')
       target.extend(term_strings)
       target.extend(_TERMINATOR_MARKER)
 

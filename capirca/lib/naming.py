@@ -144,16 +144,14 @@ class Naming:
       self._CheckUnseen('networks')
 
   def _CheckUnseen(self, def_type):
-    if def_type == 'services':
-      if self.unseen_services:
-        raise UndefinedServiceError('%s %s' % (
-            'The following tokens were nested as a values, but not defined',
-            self.unseen_services))
-    if def_type == 'networks':
-      if self.unseen_networks:
-        raise UndefinedAddressError('%s %s' % (
-            'The following tokens were nested as a values, but not defined',
-            self.unseen_networks))
+    if def_type == 'services' and self.unseen_services:
+      raise UndefinedServiceError(
+          f'The following tokens were nested as a values, but not defined {self.unseen_services}'
+      )
+    if def_type == 'networks' and self.unseen_networks:
+      raise UndefinedAddressError(
+          f'The following tokens were nested as a values, but not defined {self.unseen_networks}'
+      )
 
   def GetIpParents(self, query):
     """Return network tokens that contain IP in query.
@@ -167,12 +165,11 @@ class Naming:
     base_parents = []
     recursive_parents = []
     # convert string to nacaddr, if arg is ipaddr then convert str() to nacaddr
-    if (not isinstance(query, nacaddr.IPv4) and
-       not isinstance(query, nacaddr.IPv6)):
-      if query[:1].isdigit():
-        query = nacaddr.IP(query)
+    if (not isinstance(query, nacaddr.IPv4)
+        and not isinstance(query, nacaddr.IPv6)) and query[:1].isdigit():
+      query = nacaddr.IP(query)
     # Get parent token for an IP
-    if isinstance(query, nacaddr.IPv4) or isinstance(query, nacaddr.IPv6):
+    if isinstance(query, (nacaddr.IPv4, nacaddr.IPv6)):
       for token in self.networks:
         for item in self.networks[token].items:
           item = item.split('#')[0].strip()
@@ -185,7 +182,6 @@ class Naming:
           except ValueError:
             # item was not an IP
             pass
-    # Get parent token for another token
     else:
       for token in self.networks:
         for item in self.networks[token].items:
@@ -196,18 +192,16 @@ class Naming:
     for bp in base_parents:
       done = False
       for token in self.networks:
-        if bp in [item.split('#')[0].strip() for item in
-                  self.networks[token].items]:
-          # ignore IPs, only look at token values
-          if bp[:1].isalpha():
-            if bp not in recursive_parents:
-              recursive_parents.append(bp)
-              recursive_parents.extend(self.GetIpParents(bp))
-            done = True
+        if (bp in [
+            item.split('#')[0].strip() for item in self.networks[token].items
+        ] and bp[:1].isalpha()):
+          if bp not in recursive_parents:
+            recursive_parents.append(bp)
+            recursive_parents.extend(self.GetIpParents(bp))
+          done = True
       # if no nested tokens, just append value
-      if not done:
-        if bp[:1].isalpha() and bp not in recursive_parents:
-          recursive_parents.append(bp)
+      if not done and bp[:1].isalpha() and bp not in recursive_parents:
+        recursive_parents.append(bp)
     return sorted(list(set(recursive_parents)))
 
   def GetServiceParents(self, query):
@@ -240,13 +234,11 @@ class Naming:
     Returns:
       Returns a list of definitions containing the token in desired group.
     """
-    base_parents = []
     recursive_parents = []
-    # collect list of tokens containing query
-    for token in query_group:
-      if query in [item.split('#')[0].strip() for item in
-                   query_group[token].items]:
-        base_parents.append(token)
+    base_parents = [
+        token for token in query_group if query in
+        [item.split('#')[0].strip() for item in query_group[token].items]
+    ]
     if not base_parents:
       return []
     # iterate through tokens containing query, doing recursion if necessary
@@ -327,7 +319,6 @@ class Naming:
       UndefinedServiceError: If the service name isn't defined.
     """
     expandset = set()
-    already_done = set()
     data = []
     service_name = ''
     data = query.split('#')     # Get the token keyword and remove any comment
@@ -335,23 +326,20 @@ class Naming:
     if service_name not in self.services:
       raise UndefinedServiceError('\nNo such service: %s' % query)
 
-    already_done.add(service_name)
-
+    already_done = {service_name}
     for next_item in self.services[service_name].items:
       # Remove any trailing comment.
       service = next_item.split('#')[0].strip()
       # Recognized token, not a value.
-      if '/' not in service:
-        # Make sure we are not descending into recursion hell.
-        if service not in already_done:
-          already_done.add(service)
-          try:
-            expandset.update(self.GetService(service))
-          except UndefinedServiceError as e:
-            # One of the services in query is undefined, refine the error msg.
-            raise UndefinedServiceError('%s (in %s)' % (e, query))
-      else:
+      if '/' in service:
         expandset.add(service)
+      elif service not in already_done:
+        already_done.add(service)
+        try:
+          expandset.update(self.GetService(service))
+        except UndefinedServiceError as e:
+            # One of the services in query is undefined, refine the error msg.
+          raise UndefinedServiceError(f'{e} (in {query})')
     return sorted(expandset)
 
   def GetPortParents(self, query, proto):
@@ -369,7 +357,7 @@ class Naming:
       service tokens.
     """
     # turn the given port and protocol into a PortProtocolPair object
-    given_ppp = portlib.PPP(query + '/' + proto)
+    given_ppp = portlib.PPP(f'{query}/{proto}')
     base_parents = []
     matches = set()
     # check each service token to see if it's a PPP or a nested group.
@@ -380,31 +368,27 @@ class Naming:
       for port_child in self.services[service_token].items:
         ppp = portlib.PPP(port_child)
         # check for exact match
-        if ppp.is_single_port and ppp == given_ppp:
+        if ((not ppp.is_single_port or ppp != given_ppp)
+            and (not ppp.is_range or given_ppp not in ppp) and ppp.nested
+            and service_token not in base_parents):
+          base_parents.append(service_token)
+        elif (ppp.is_single_port and ppp == given_ppp
+              or ppp.is_range and given_ppp in ppp
+              or not ppp.nested) and (ppp.is_single_port and ppp == given_ppp
+                                      or ppp.is_range and given_ppp in ppp):
           matches.add(service_token)
-        # check if it's within ppp's port range
-        elif ppp.is_range and given_ppp in ppp:
-          matches.add(service_token)
-        # if it's a nested token, add to a list to recurisvely
-        # check later.
-        elif ppp.nested:
-          if service_token not in base_parents:
-            base_parents.append(service_token)
     # break down the nested service tokens into PPP objects and check
     # against given_ppp
     for bp in base_parents:
       for port_child in self.GetService(bp):
         ppp = portlib.PPP(port_child)
         # check for exact match
-        if ppp.is_single_port and ppp == given_ppp:
-          matches.add(bp)
-        # check if it's within ppp's port range
-        elif ppp.is_range and given_ppp in ppp:
+        if (ppp.is_single_port and ppp == given_ppp
+            or ppp.is_range and given_ppp in ppp):
           matches.add(bp)
     # error if the port/protocol pair is not found.
     if not matches:
-      raise UndefinedPortError(
-          '%s/%s is not found in any service tokens' % (query, proto))
+      raise UndefinedPortError(f'{query}/{proto} is not found in any service tokens')
     return sorted(matches)
 
   def GetServiceByProto(self, query, proto):
@@ -514,23 +498,25 @@ class Naming:
       NoDefinitionsError: if no definitions are found.
     """
     file_names = []
-    get_files = {'services': lambda: glob.glob(defdirectory + '/*.svc'),
-                 'networks': lambda: glob.glob(defdirectory + '/*.net')}
+    get_files = {
+        'services': lambda: glob.glob(f'{defdirectory}/*.svc'),
+        'networks': lambda: glob.glob(f'{defdirectory}/*.net'),
+    }
 
     if def_type in get_files:
       file_names = get_files[def_type]()
     else:
-      raise NoDefinitionsError('Definitions type %s is unknown.' % def_type)
+      raise NoDefinitionsError(f'Definitions type {def_type} is unknown.')
     if not file_names:
-      raise NoDefinitionsError('No definition files for %s in %s found.' %
-                               (def_type, defdirectory))
+      raise NoDefinitionsError(
+          f'No definition files for {def_type} in {defdirectory} found.')
 
     for current_file in file_names:
       try:
         with open(current_file, 'r') as file_handle:
           self._ParseFile(file_handle, def_type)
       except IOError as error_info:
-        raise NoDefinitionsError('%s' % error_info)
+        raise NoDefinitionsError(f'{error_info}')
 
   def _ParseFile(self, file_handle, def_type):
     for line in file_handle:
@@ -579,8 +565,8 @@ class Naming:
       NamingSyntaxError: Syntax error parsing config.
     """
     if definition_type not in ['services', 'networks']:
-      raise UnexpectedDefinitionTypeError('%s %s' % (
-          'Received an unexpected definition type:', definition_type))
+      raise UnexpectedDefinitionTypeError(
+          f'Received an unexpected definition type: {definition_type}')
     line = line.strip()
     if not line or line.startswith('#'):  # Skip comments and blanks.
       return
@@ -598,8 +584,7 @@ class Naming:
       if definition_type == 'services':
         for port in line_parts[1].strip().split():
           if not self.port_re.match(port):
-            raise NamingSyntaxError('%s: %s' % (
-                'The following line has a syntax error', line))
+            raise NamingSyntaxError(f'The following line has a syntax error: {line}')
         if self.current_symbol in self.services:
           raise NamespaceCollisionError('%s %s' % (
               '\nMultiple definitions found for service: ',
@@ -626,7 +611,6 @@ class Naming:
       else:
         raise ParseError('Unknown definitions type.')
       values = line_parts[1]
-    # No '=', so this is a value only line
     else:
       values = line_parts[0]  # values for previous var are continued this line
     for value_piece in values.split():
@@ -635,18 +619,14 @@ class Naming:
       if not self.current_symbol:
         break
       if comment:
-        self.unit.items.append(value_piece + ' # ' + comment)
+        self.unit.items.append(f'{value_piece} # {comment}')
       else:
         self.unit.items.append(value_piece)
         # token?
         if value_piece[0].isalpha() and ':' not in value_piece:
-          if definition_type == 'services':
-            # already in top definitions list?
-            if value_piece not in self.services:
-              # already have it as an unused value?
-              if value_piece not in self.unseen_services:
-                self.unseen_services[value_piece] = True
-          if definition_type == 'networks':
-            if value_piece not in self.networks:
-              if value_piece not in self.unseen_networks:
-                self.unseen_networks[value_piece] = True
+          if (definition_type == 'services' and value_piece not in self.services
+              and value_piece not in self.unseen_services):
+            self.unseen_services[value_piece] = True
+          if (definition_type == 'networks' and value_piece not in self.networks
+              and value_piece not in self.unseen_networks):
+            self.unseen_networks[value_piece] = True

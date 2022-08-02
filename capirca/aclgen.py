@@ -136,9 +136,7 @@ def SkipLines(text, skip_line_func=False):
   Returns:
     ret_text: text(list) minus the skipped lines
   """
-  if not skip_line_func:
-    return text
-  return [x for x in text if not skip_line_func(x)]
+  return [x for x in text if not skip_line_func(x)] if skip_line_func else text
 
 
 def RenderFile(base_directory: str, input_file: pathlib.Path,

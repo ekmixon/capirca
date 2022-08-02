@@ -104,7 +104,7 @@ class Term(aclgenerator.Term):
       self._action_table['reject'] = ('-j REJECT --reject-with '
                                       'icmp-host-prohibited')
 
-    self.term_name = '%s_%s' % (self.filter[:1], self.term.name)
+    self.term_name = f'{self.filter[:1]}_{self.term.name}'
 
   def __str__(self):
     # Verify platform specific terms. Skip whole term if platform does not

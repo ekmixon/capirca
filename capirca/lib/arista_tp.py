@@ -155,7 +155,7 @@ class Term(aclgenerator.Term):
     self.noverbose = noverbose
 
     if term_type not in self._TERM_TYPE:
-      raise ValueError("unknown filter type: %s" % term_type)
+      raise ValueError(f"unknown filter type: {term_type}")
 
   def __str__(self):
     # verify platform specific terms. skip the whole term if the platform

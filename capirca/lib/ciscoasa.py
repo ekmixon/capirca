@@ -69,31 +69,28 @@ class Term(cisco.Term):
   def __str__(self):
     # Verify platform specific terms. Skip whole term if platform does not
     # match.
-    if self.term.platform:
-      if 'ciscoasa' not in self.term.platform:
-        return ''
-    if self.term.platform_exclude:
-      if 'ciscoasa' in self.term.platform_exclude:
-        return ''
+    if self.term.platform and 'ciscoasa' not in self.term.platform:
+      return ''
+    if self.term.platform_exclude and 'ciscoasa' in self.term.platform_exclude:
+      return ''
 
     ret_str = ['\n']
 
     # Don't render icmpv6 protocol terms under inet, or icmp under inet6
     if ((self.af == 6 and 'icmp' in self.term.protocol) or
         (self.af == 4 and 'icmpv6' in self.term.protocol)):
-      ret_str.append('remark Term %s' % self.term.name)
-      ret_str.append('remark not rendered due to protocol/AF mismatch.')
+      ret_str.extend((
+          f'remark Term {self.term.name}',
+          'remark not rendered due to protocol/AF mismatch.',
+      ))
       return '\n'.join(ret_str)
 
-    ret_str.append('access-list %s remark %s' % (self.filter_name,
-                                                 self.term.name))
+    ret_str.append(f'access-list {self.filter_name} remark {self.term.name}')
     if self.term.owner:
-      self.term.comment.append('Owner: %s' % self.term.owner)
+      self.term.comment.append(f'Owner: {self.term.owner}')
     for comment in self.term.comment:
-      for line in comment.split('\n'):
-        ret_str.append('access-list %s remark %s' % (self.filter_name,
-                                                     str(line)[:100]))
-
+      ret_str.extend(f'access-list {self.filter_name} remark {str(line)[:100]}'
+                     for line in comment.split('\n'))
     # Term verbatim output - this will skip over normal term creation
     # code by returning early.  Warnings provided in policy.py.
     if self.term.verbatim:
@@ -103,18 +100,12 @@ class Term(cisco.Term):
         return '\n'.join(ret_str)
 
     # protocol
-    if not self.term.protocol:
-      protocol = ['ip']
-    else:
-      # fix the protocol
-      protocol = self.term.protocol
-
+    protocol = self.term.protocol or ['ip']
     # source address
     if self.term.source_address:
       source_address = self.term.GetAddressOfVersion('source_address', self.af)
-      source_address_exclude = self.term.GetAddressOfVersion(
-          'source_address_exclude', self.af)
-      if source_address_exclude:
+      if source_address_exclude := self.term.GetAddressOfVersion(
+          'source_address_exclude', self.af):
         source_address = nacaddr.ExcludeAddrs(
             source_address,
             source_address_exclude)
@@ -126,9 +117,8 @@ class Term(cisco.Term):
     if self.term.destination_address:
       destination_address = self.term.GetAddressOfVersion(
           'destination_address', self.af)
-      destination_address_exclude = self.term.GetAddressOfVersion(
-          'destination_address_exclude', self.af)
-      if destination_address_exclude:
+      if destination_address_exclude := self.term.GetAddressOfVersion(
+          'destination_address_exclude', self.af):
         destination_address = nacaddr.ExcludeAddrs(
             destination_address,
             destination_address_exclude)
@@ -146,14 +136,8 @@ class Term(cisco.Term):
         extra_options.append('established')
     self.options.extend(extra_options)
 
-    # ports
-    source_port = [()]
-    destination_port = [()]
-    if self.term.source_port:
-      source_port = self.term.source_port
-    if self.term.destination_port:
-      destination_port = self.term.destination_port
-
+    source_port = self.term.source_port or [()]
+    destination_port = self.term.destination_port or [()]
     # logging
     if self.term.logging:
       self.options.append('log')
@@ -179,7 +163,7 @@ class Term(cisco.Term):
                        (saddr == 'any')) and
                       ((isinstance(daddr, nacaddr.IPv4)) or (daddr == 'any'))):
                     do_output = True
-                if self.af == 6:
+                elif self.af == 6:
                   if (((isinstance(saddr, nacaddr.IPv6)) or
                        (saddr == 'any')) and
                       ((isinstance(daddr, nacaddr.IPv6)) or (daddr == 'any'))):

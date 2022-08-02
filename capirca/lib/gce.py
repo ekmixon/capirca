@@ -188,7 +188,7 @@ class Term(gcp.Term):
       GceFirewallError: The term name is too long.
     """
     if self.term.owner:
-      self.term.comment.append('Owner: %s' % self.term.owner)
+      self.term.comment.append(f'Owner: {self.term.owner}')
     term_dict = {
         'description': ' '.join(self.term.comment),
         'name': self.term.name,
@@ -196,12 +196,9 @@ class Term(gcp.Term):
         }
     if self.term.network:
       term_dict['network'] = self.term.network
-      term_dict['name'] = '%s-%s' % (
-          self.term.network.split('/')[-1], term_dict['name'])
-    # Identify if this is inet6 processing for a term under a mixed policy.
-    mixed_policy_inet6_term = False
-    if self.policy_inet_version == 'mixed' and self.inet_version == 'inet6':
-      mixed_policy_inet6_term = True
+      term_dict['name'] = f"{self.term.network.split('/')[-1]}-{term_dict['name']}"
+    mixed_policy_inet6_term = (self.policy_inet_version == 'mixed'
+                               and self.inet_version == 'inet6')
     # Update term name to have the IPv6 suffix for the inet6 rule.
     if mixed_policy_inet6_term:
       term_dict['name'] = gcp.GetIpv6TermName(term_dict['name'])
@@ -209,12 +206,12 @@ class Term(gcp.Term):
     # Checking counts of tags, and ports to see if they exceeded limits.
     if len(self.term.source_tag) > self._TERM_SOURCE_TAGS_LIMIT:
       raise GceFirewallError(
-          'GCE firewall rule exceeded number of source tags per rule: %s' %
-          self.term.name)
+          f'GCE firewall rule exceeded number of source tags per rule: {self.term.name}'
+      )
     if len(self.term.destination_tag) > self._TERM_TARGET_TAGS_LIMIT:
       raise GceFirewallError(
-          'GCE firewall rule exceeded number of target tags per rule: %s' %
-          self.term.name)
+          f'GCE firewall rule exceeded number of target tags per rule: {self.term.name}'
+      )
 
     if self.term.source_tag:
       if self.term.direction == 'INGRESS':
@@ -235,15 +232,15 @@ class Term(gcp.Term):
     term_af = self.AF_MAP.get(self.inet_version)
     if self.inet_version == 'mixed':
       raise GceFirewallError(
-          'GCE firewall rule has incorrect inet_version for rule: %s' %
-          self.term.name)
+          f'GCE firewall rule has incorrect inet_version for rule: {self.term.name}'
+      )
 
     # Exit early for inet6 processing of mixed rules that have only tags,
     # and no IP addresses, since this is handled in the inet processing.
-    if mixed_policy_inet6_term:
-      if not self.term.source_address and not self.term.destination_address:
-        if 'targetTags' in term_dict or 'sourceTags' in term_dict:
-          return []
+    if (mixed_policy_inet6_term and not self.term.source_address
+        and not self.term.destination_address
+        and ('targetTags' in term_dict or 'sourceTags' in term_dict)):
+      return []
 
     saddrs = sorted(self.term.GetAddressOfVersion('source_address', term_af),
                     key=ipaddress.get_mixed_type_key)
@@ -282,10 +279,7 @@ class Term(gcp.Term):
       # Since each term has inet_version, 'mixed' is correctly processed here.
       # Convert protocol to number for uniformity of comparison.
       # PROTO_MAP always returns protocol number.
-      if proto in self._ALLOW_PROTO_NAME:
-        proto_num = self.PROTO_MAP[proto]
-      else:
-        proto_num = proto
+      proto_num = self.PROTO_MAP[proto] if proto in self._ALLOW_PROTO_NAME else proto
       if proto_num == self.PROTO_MAP['icmp'] and self.inet_version == 'inet6':
         logging.warning(
             'WARNING: Term %s is being rendered for inet6, ICMP '
@@ -325,8 +319,8 @@ class Term(gcp.Term):
             ports.append('%d-%d' % (start, end))
         if len(ports) > self._TERM_PORTS_LIMIT:
           raise GceFirewallError(
-              'GCE firewall rule exceeded number of ports per rule: %s' %
-              self.term.name)
+              f'GCE firewall rule exceeded number of ports per rule: {self.term.name}'
+          )
         dest['ports'] = ports
 
       action = self.ACTION_MAP[self.term.action[0]]
@@ -363,11 +357,9 @@ class Term(gcp.Term):
     else:
       rules.append(proto_dict)
 
-    # Sanity checking term name lengths.
-    long_rules = [rule['name'] for rule in rules if len(rule['name']) > 63]
-    if long_rules:
+    if long_rules := [rule['name'] for rule in rules if len(rule['name']) > 63]:
       raise GceFirewallError(
-          'GCE firewall name ended up being too long: %s' % long_rules)
+          f'GCE firewall name ended up being too long: {long_rules}')
     return rules
 
 

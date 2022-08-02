@@ -114,8 +114,8 @@ class Term(gcp.Term):
     # naturally. Something has gone horribly wrong if you encounter this error.
     if self.address_family == 'mixed':
       raise gcp.TermError(
-          'Hierarchical firewall rule has incorrect inet_version for rule: %s' %
-          self.term.name)
+          f'Hierarchical firewall rule has incorrect inet_version for rule: {self.term.name}'
+      )
 
   def ConvertToDict(self, priority_index):
     """Converts term to dict representation of SecurityPolicy.Rule JSON format.

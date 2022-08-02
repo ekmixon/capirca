@@ -108,11 +108,11 @@ class Config:
         raise JuniperIndentationError('Too many close braces.')
     spaces = ' ' * self.indent
     self.lines.append(spaces + line.strip())
-    if not line.find('/*') >= 0 and line.find('*/') >= 0:
+    if line.find('/*') < 0 and line.find('*/') >= 0:
       self.indent -= 1
       if self.indent < self._initial_indent:
         raise JuniperIndentationError('Too many close comments.')
-    if not line.find('*/') >= 0 and line.find('/*') >= 0:
+    if line.find('*/') < 0 and line.find('/*') >= 0:
       self.indent += 1
     if line.endswith(' {'):
       self.indent += self.tabstop
@@ -173,7 +173,7 @@ class Term(aclgenerator.Term):
     self.noverbose = noverbose
 
     if term_type not in self._TERM_TYPE:
-      raise ValueError('Unknown Filter Type: %s' % term_type)
+      raise ValueError(f'Unknown Filter Type: {term_type}')
     if 'hopopt' in self.term.protocol:
       loc = self.term.protocol.index('hopopt')
       self.term.protocol[loc] = 'hop-by-hop'

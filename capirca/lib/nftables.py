@@ -124,7 +124,7 @@ class Term(aclgenerator.Term):
                                                        af=self.af))
         return ''
       # TODO(castagno): Add support for ipv6
-      output.append('ip saddr %s' % self._FormatMatch(src_addrs))
+      output.append(f'ip saddr {self._FormatMatch(src_addrs)}')
 
     # Destination address
     if self.term.destination_address or self.term.source_address_exclude:
@@ -136,7 +136,7 @@ class Term(aclgenerator.Term):
                                                        af=self.af))
         return ''
       # TODO(castagno): Add support for ipv6
-      output.append('ip daddr %s' % self._FormatMatch(dst_addrs))
+      output.append(f'ip daddr {self._FormatMatch(dst_addrs)}')
 
     # Protocol
     #
@@ -145,22 +145,21 @@ class Term(aclgenerator.Term):
     # * source port
     # * destination port
     # * ICMP type
-    if self.term.protocol and not (self.term.source_port or
-                                   self.term.destination_port or
-                                   self.term.icmp_type):
-      output.append('ip protocol %s' % self._FormatMatch(self.term.protocol))
+    if (self.term.protocol and not self.term.source_port
+        and not self.term.destination_port and not self.term.icmp_type):
+      output.append(f'ip protocol {self._FormatMatch(self.term.protocol)}')
 
     # Source port
     if self.term.source_port:
-      output.append('%s sport %s' %
-                    (self._FormatMatch(self.term.protocol),
-                     self._FormatMatch(self.term.source_port)))
+      output.append(
+          f'{self._FormatMatch(self.term.protocol)} sport {self._FormatMatch(self.term.source_port)}'
+      )
 
     # Destination port
     if self.term.destination_port:
-      output.append('%s dport %s' %
-                    (self._FormatMatch(self.term.protocol),
-                     self._FormatMatch(self.term.destination_port)))
+      output.append(
+          f'{self._FormatMatch(self.term.protocol)} dport {self._FormatMatch(self.term.destination_port)}'
+      )
 
     # Icmp type
     if self.term.icmp_type:
@@ -170,7 +169,7 @@ class Term(aclgenerator.Term):
       if icmp_types != ['']:
         # nft intepreter requires ICMP types to be spelled out
         icmp_name_types = self.ICMP_TYPE[self.AF_MAP[self.af]]
-        icmp_type_names = dict((v, k) for k, v in icmp_name_types.items())
+        icmp_type_names = {v: k for k, v in icmp_name_types.items()}
         output.append('icmp type %s' %
                       self._FormatMatch([icmp_type_names[icmp_type] for
                                          icmp_type in icmp_types]))
@@ -183,7 +182,7 @@ class Term(aclgenerator.Term):
     # Setup logic so that only one log statement is printed.
     if self.term.logging and not self.term.log_name:
       output.append('log')
-    elif (self.term.logging and self.term.log_name) or self.term.log_name:
+    elif self.term.logging or self.term.log_name:
       # Only supports log prefix's of 128 characters truncate to 126 to support
       # the additional suffix that is being added
       output.append('log prefix "%s: "' % self.term.log_name[:126])
@@ -193,7 +192,7 @@ class Term(aclgenerator.Term):
 
     # Owner (implement as comment)
     if self.term.owner:
-      self.term.comment.append('Owner: %s' % self.term.owner)
+      self.term.comment.append(f'Owner: {self.term.owner}')
 
     # Comment
     if self.term.comment:
@@ -231,11 +230,7 @@ class Term(aclgenerator.Term):
           output.append('%d-%d' % (range_start, range_end))
       else:
         output.append(str(element))
-    if len(output) > 1:
-      # idiosyncrasy of nftables output: no leading space to trailing }
-      return '{ ' + ', '.join(output) + '}'
-    else:
-      return output[0]
+    return '{ ' + ', '.join(output) + '}' if len(output) > 1 else output[0]
 
 
 class Nftables(aclgenerator.ACLGenerator):
@@ -304,7 +299,7 @@ class Nftables(aclgenerator.ACLGenerator):
 
       if hook_name not in self._VALID_HOOK_NAMES:
         raise InvalidTargetOption(
-            'Specified hook name (%s) is not a valid hook name.' % hook_name)
+            f'Specified hook name ({hook_name}) is not a valid hook name.')
 
       # chain priority, mandatory
       chain_priority = None
@@ -313,8 +308,8 @@ class Nftables(aclgenerator.ACLGenerator):
           chain_priority = str(int(filter_options[2]))
         except ValueError:
           raise InvalidTargetOption(
-              'Specified chain priority is not an integer (%s).'
-              % filter_options[2])
+              f'Specified chain priority is not an integer ({filter_options[2]}).'
+          )
 
       # TODO(castagno): fix this. If you dont have hook name it never prints
       # anyways, so its not really optional
@@ -328,8 +323,7 @@ class Nftables(aclgenerator.ACLGenerator):
       if len(filter_options) == 4:
         af = filter_options[3]
         if af not in self._VALID_ADDRESS_FAMILIES:
-          raise InvalidTargetOption(
-              'Specified address family (%s) is not supported.' % af)
+          raise InvalidTargetOption(f'Specified address family ({af}) is not supported.')
 
       # Terms
       valid_terms = []
@@ -364,21 +358,18 @@ class Nftables(aclgenerator.ACLGenerator):
 
     # Iterate over tables
     for af in sorted(self.tables):
-      output.append('flush table %s table_filter' %
-                    self._VALID_ADDRESS_FAMILIES[af])
-      output.append('table %s table_filter {' %
-                    self._VALID_ADDRESS_FAMILIES[af])
-
+      output.extend((
+          f'flush table {self._VALID_ADDRESS_FAMILIES[af]} table_filter',
+          'table %s table_filter {' % self._VALID_ADDRESS_FAMILIES[af],
+      ))
       # Iterate over chains
-      for (chain_name, hook_name,
-           chain_priority, valid_terms) in self.tables[af]:
+      for chain_name, hook_name, chain_priority, valid_terms in self.tables[af]:
         output.append('\tchain %s {' % chain_name)
         if hook_name and chain_priority:
           output.append('\t\ttype filter hook %s priority %s;' %
                         (hook_name, chain_priority))
           for valid_term in valid_terms:
-            term_string = str(valid_term)
-            if term_string:
+            if term_string := str(valid_term):
               output.append('\t\t' + term_string)
         output.append('\t}')  # chain
       output.append('}')  # table

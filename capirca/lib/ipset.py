@@ -145,15 +145,13 @@ class Term(iptables.Term):
     if src_addr and dst_addr:
       if src_addr == self._all_ips:
         if 'src' in self.addr_sets:
-          src_addr_stmt = ('-m set --match-set %s src' %
-                           self.addr_sets['src'][0])
+          src_addr_stmt = f"-m set --match-set {self.addr_sets['src'][0]} src"
       else:
         src_addr_stmt = '-s %s/%d' % (src_addr.network_address,
                                       src_addr.prefixlen)
       if dst_addr == self._all_ips:
         if 'dst' in self.addr_sets:
-          dst_addr_stmt = ('-m set --match-set %s dst' %
-                           self.addr_sets['dst'][0])
+          dst_addr_stmt = f"-m set --match-set {self.addr_sets['dst'][0]} dst"
       else:
         dst_addr_stmt = '-d %s/%d' % (dst_addr.network_address,
                                       dst_addr.prefixlen)
@@ -165,7 +163,7 @@ class Term(iptables.Term):
     if len(term_name) + len(suffix) + 1 > self._SET_MAX_LENGTH:
       set_name_max_lenth = self._SET_MAX_LENGTH - len(suffix) - 1
       term_name = term_name[:set_name_max_lenth]
-    return '%s-%s' % (term_name, suffix)
+    return f'{term_name}-{suffix}'
 
 
 class Ipset(iptables.Iptables):
@@ -185,8 +183,7 @@ class Ipset(iptables.Iptables):
     # Actual rendering happens in __str__, so it has to be called
     # before we do set specific part.
     iptables_output = super().__str__()
-    output = []
-    output.append(self._MARKER_BEGIN)
+    output = [self._MARKER_BEGIN]
     for (_, _, _, _, terms) in self.iptables_policies:
       for term in terms:
         output.extend(self._GenerateSetConfig(term))
@@ -208,19 +205,19 @@ class Ipset(iptables.Iptables):
     c_str = 'create'
     a_str = 'add'
     if 'exists' in self.filter_options:
-      c_str = c_str + ' -exist'
-      a_str = a_str + ' -exist'
+      c_str += ' -exist'
+      a_str += ' -exist'
     for direction in sorted(term.addr_sets, reverse=True):
       set_name, addr_list = term.addr_sets[direction]
       set_hashsize = 1 << len(addr_list).bit_length()
       set_maxelem = set_hashsize
-      output.append('%s %s %s family %s hashsize %i maxelem %i' %
-                    (c_str,
-                     set_name,
-                     self._SET_TYPE,
-                     term.af,
-                     set_hashsize,
-                     set_maxelem))
-      for address in addr_list:
-        output.append('%s %s %s' % (a_str, set_name, address))
+      output.append(('%s %s %s family %s hashsize %i maxelem %i' % (
+          c_str,
+          set_name,
+          self._SET_TYPE,
+          term.af,
+          set_maxelem,
+          set_maxelem,
+      )))
+      output.extend(f'{a_str} {set_name} {address}' for address in addr_list)
     return output

@@ -52,9 +52,7 @@ class Term(aclgenerator.Term):
     """Return true if a term indicates that logging is desired."""
     # Supported values in GCP are '', 'true', and 'True'.
     settings = [str(x) for x in self.term.logging]
-    if any(value in settings for value in ['true', 'True']):
-      return True
-    return False
+    return any((value in settings for value in ['true', 'True']))
 
 
 class GCP(aclgenerator.ACLGenerator):
@@ -65,13 +63,12 @@ class GCP(aclgenerator.ACLGenerator):
 
   def __str__(self):
     """Return the JSON blob for a GCP object."""
-    out = '%s\n\n' % (
-        json.dumps(
-            self.policies,
-            indent=2,
-            separators=(six.ensure_str(','), six.ensure_str(': ')),
-            sort_keys=True))
-    return out
+    return '%s\n\n' % (json.dumps(
+        self.policies,
+        indent=2,
+        separators=(six.ensure_str(','), six.ensure_str(': ')),
+        sort_keys=True,
+    ))
 
 
 def IsDefaultDeny(term):
@@ -149,9 +146,7 @@ def TruncateString(raw_string, max_length):
   Returns:
     string: The truncated string.
   """
-  if len(raw_string) > max_length:
-    return raw_string[:max_length]
-  return raw_string
+  return raw_string[:max_length] if len(raw_string) > max_length else raw_string
 
 
 def GetIpv6TermName(term_name):
@@ -164,4 +159,4 @@ def GetIpv6TermName(term_name):
     string: The IPv6 requivalent term name.
   """
 
-  return '%s-%s' % (term_name, 'v6')
+  return f'{term_name}-v6'

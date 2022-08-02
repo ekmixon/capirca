@@ -123,8 +123,8 @@ class Term:
       for protocol in term.protocol:
         if (protocol not in self.PROTO_MAP and
             str(protocol) not in [str(p) for p in self.PROTO_MAP_BY_NUMBER]):
-          raise UnsupportedFilterError('Protocol(s) %s are not supported.'
-                                       % str(term.protocol))
+          raise UnsupportedFilterError(
+              f'Protocol(s) {str(term.protocol)} are not supported.')
 
       term.protocol = ProtocolNameToNumber(term.protocol,
                                            self.ALWAYS_PROTO_NUM,
@@ -173,27 +173,25 @@ class Term:
     if not icmp_types:
       return ['']
     # only protocols icmp or icmpv6 can be used with icmp-types
-    if protocols != ['icmp'] and protocols != ['icmpv6']:
-      raise UnsupportedFilterError('%s %s' % (
-          'icmp-types specified for non-icmp protocols in term: ',
-          self.term.name))
+    if protocols not in [['icmp'], ['icmpv6']]:
+      raise UnsupportedFilterError(
+          f'icmp-types specified for non-icmp protocols in term:  {self.term.name}'
+      )
     # make sure we have a numeric address family (4 or 6)
     af = self.NormalizeAddressFamily(af)
     # check that addr family and protocl are appropriate
     if ((af != 4 and protocols == ['icmp']) or
         (af != 6 and protocols == ['icmpv6'])):
-      raise MismatchIcmpInetError('%s %s, %s: %s, %s: %s' % (
-          'ICMP/ICMPv6 mismatch with address family IPv4/IPv6 in term',
-          self.term.name, 'address family', af, 'protocols',
-          ','.join(protocols)))
+      raise MismatchIcmpInetError(
+          f"ICMP/ICMPv6 mismatch with address family IPv4/IPv6 in term {self.term.name}, address family: {af}, protocols: {','.join(protocols)}"
+      )
     # ensure all icmp types are valid
     for icmptype in icmp_types:
       if icmptype not in self.ICMP_TYPE[af]:
         raise UnknownIcmpTypeError('%s %s %s %s' % (
             '\nUnrecognized ICMP-type (', icmptype,
             ') specified in term ', self.term.name))
-    rval = []
-    rval.extend([self.ICMP_TYPE[af][x] for x in icmp_types])
+    rval = [self.ICMP_TYPE[af][x] for x in icmp_types]
     rval.sort()
     return rval
 
@@ -277,12 +275,10 @@ class ACLGenerator:
         # error on unsupported optional keywords that could result
         # in dangerous or unexpected results
         for term in terms:
-          if term.platform:
-            if self._PLATFORM not in term.platform:
-              continue
-          if term.platform_exclude:
-            if self._PLATFORM in term.platform_exclude:
-              continue
+          if term.platform and self._PLATFORM not in term.platform:
+            continue
+          if term.platform_exclude and self._PLATFORM in term.platform_exclude:
+            continue
           # Only verify optional keywords if the term is active on the platform.
           err = []
           warn = []
@@ -290,7 +286,7 @@ class ACLGenerator:
             # Private attributes do not need to be valid keywords.
             if (val and el not in supported_tokens and not
                 el.startswith('flatten')):
-              if val and el not in self.WARN_IF_UNSUPPORTED:
+              if el not in self.WARN_IF_UNSUPPORTED:
                 err.append(el)
               else:
                 warn.append(el)
@@ -322,7 +318,7 @@ class ACLGenerator:
   def _TranslatePolicy(self, pol, exp_info):
     # pylint: disable=unused-argument
     """Translate policy contents to platform specific data structures."""
-    raise Error('%s does not implement _TranslatePolicies()' % self._PLATFORM)
+    raise Error(f'{self._PLATFORM} does not implement _TranslatePolicies()')
 
   def _BuildTokens(self):
     """Provide a default for supported tokens and sub tokens.
@@ -386,10 +382,7 @@ class ACLGenerator:
       UnsupportedFilterError: Raised when token is not supported.
     """
     supported_tokens, supported_sub_tokens = self._BuildTokens()
-    # make sure we don't have subtokens that are not listed. This should not
-    # occur unless a platform's tokens/subtokens are changed.
-    undefined_st = set(supported_sub_tokens) - supported_tokens
-    if undefined_st:
+    if undefined_st := set(supported_sub_tokens) - supported_tokens:
       raise UnsupportedFilterError(
           'Found undefined sub tokens missing from the supported token list! '
           'These must match. (%s)' % ' '.join(undefined_st))
@@ -417,19 +410,15 @@ class ACLGenerator:
     mod = term
 
     # Determine which protocols this term applies to.
-    if term.protocol:
-      protocols = set(term.protocol)
-    else:
-      protocols = set((self._DEFAULT_PROTOCOL,))
-
+    protocols = set(term.protocol) if term.protocol else {self._DEFAULT_PROTOCOL}
     # Check that the address family matches the protocols.
     if af not in self._SUPPORTED_AF:
       raise UnsupportedAFError(
           '\nAddress family %s, found in %s, unsupported '
           'by %s' % (af, term.name, self._PLATFORM))
     if af in self._FILTER_BLACKLIST:
-      unsupported_protocols = self._FILTER_BLACKLIST[af].intersection(protocols)
-      if unsupported_protocols:
+      if unsupported_protocols := self._FILTER_BLACKLIST[af].intersection(
+          protocols):
         raise UnsupportedFilterError(
             '\n%s targets do not support protocol(s) %s '
             'with address family %s (in %s)' % (self._PLATFORM,
@@ -440,7 +429,7 @@ class ACLGenerator:
     # Many renders expect high ports for terms with the established option.
     for opt in [str(x) for x in term.option]:
       if opt.find('established') == 0:
-        unstateful_protocols = protocols.difference(set(('tcp', 'udp')))
+        unstateful_protocols = protocols.difference({'tcp', 'udp'})
         if not unstateful_protocols:
           # TCP/UDP: add in high ports then collapse to eliminate overlaps.
           mod = copy.deepcopy(term)
@@ -449,9 +438,7 @@ class ACLGenerator:
           mod.destination_port = mod.CollapsePortList(mod.destination_port)
         elif not all_protocols_stateful:
           errmsg = 'Established option supplied with inappropriate protocol(s)'
-          raise EstablishedError('%s %s %s %s' %
-                                 (errmsg, unstateful_protocols,
-                                  'in term', term.name))
+          raise EstablishedError(f'{errmsg} {unstateful_protocols} in term {term.name}')
         break
 
     return mod
@@ -528,17 +515,17 @@ def AddRepositoryTags(prefix='', rid=True, date=True, revision=True):
   """
   tags = []
 
-  # Format print the '$' into the RCS tags in order prevent the tags from
-  # being interpolated here.
-  p4_id = '%sId:%s' % ('$', '$')
-  p4_date = '%sDate:%s' % ('$', '$')
-  p4_revision = '%sRevision:%s' % ('$', '$')
   if rid:
-    tags.append('%s%s' % (prefix, p4_id))
+      # Format print the '$' into the RCS tags in order prevent the tags from
+      # being interpolated here.
+    p4_id = '$Id:$'
+    tags.append(f'{prefix}{p4_id}')
   if date:
-    tags.append('%s%s' % (prefix, p4_date))
+    p4_date = '$Date:$'
+    tags.append(f'{prefix}{p4_date}')
   if revision:
-    tags.append('%s%s' % (prefix, p4_revision))
+    p4_revision = '$Revision:$'
+    tags.append(f'{prefix}{p4_revision}')
   return tags
 
 

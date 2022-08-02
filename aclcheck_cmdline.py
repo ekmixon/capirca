@@ -47,7 +47,7 @@ def main():
   check = aclcheck.AclCheck(policy_obj, src=FLAGS.src, dst=FLAGS.dst,
                             sport=FLAGS.sport, dport=FLAGS.dport,
                             proto=FLAGS.proto)
-  print(str(check))
+  print(check)
 
 if __name__ == '__main__':
   main()

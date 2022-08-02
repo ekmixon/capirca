@@ -56,21 +56,24 @@ class Arista(cisco.Cisco):
     target = []
     if filter_type == 'standard':
       if filter_name.isdigit():
-        target.append('no access-list %s' % filter_name)
+        target.append(f'no access-list {filter_name}')
       else:
-        target.append('no ip access-list standard %s' % filter_name)
-        target.append('ip access-list standard %s' % filter_name)
+        target.extend((
+            f'no ip access-list standard {filter_name}',
+            f'ip access-list standard {filter_name}',
+        ))
     elif filter_type == 'extended':
-      target.append('no ip access-list %s' % filter_name)
-      target.append('ip access-list %s' % filter_name)
+      target.extend((f'no ip access-list {filter_name}',
+                     f'ip access-list {filter_name}'))
     elif filter_type == 'object-group':
-      target.append('no ip access-list %s' % filter_name)
-      target.append('ip access-list %s' % filter_name)
+      target.extend((f'no ip access-list {filter_name}',
+                     f'ip access-list {filter_name}'))
     elif filter_type == 'inet6':
-      target.append('no ipv6 access-list %s' % filter_name)
-      target.append('ipv6 access-list %s' % filter_name)
+      target.extend((
+          f'no ipv6 access-list {filter_name}',
+          f'ipv6 access-list {filter_name}',
+      ))
     else:
       raise UnsupportedEosAccessListError(
-          'access list type %s not supported by %s' % (
-              filter_type, self._PLATFORM))
+          f'access list type {filter_type} not supported by {self._PLATFORM}')
     return target

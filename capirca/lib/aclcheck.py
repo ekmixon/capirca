@@ -75,17 +75,9 @@ class AclCheck:
     self.proto = proto
 
     # validate source port
-    if sport == 'any':
-      self.sport = sport
-    else:
-      self.sport = port.Port(sport)
-
+    self.sport = sport if sport == 'any' else port.Port(sport)
     # validate destination port
-    if dport == 'any':
-      self.dport = dport
-    else:
-      self.dport = port.Port(dport)
-
+    self.dport = dport if dport == 'any' else port.Port(dport)
     # validate source address
     if src == 'any':
       self.src = src
@@ -172,13 +164,11 @@ class AclCheck:
 
   def ActionMatch(self, action='any'):
     """Return list of matched terms with specified actions."""
-    match_list = []
-    for match in self.matches:
-      if match.action:
-        if not match.possibles:
-          if action == 'any' or action in match.action:
-            match_list.append(match)
-    return match_list
+    return [
+        match for match in self.matches
+        if match.action and not match.possibles and (
+            action == 'any' or action in match.action)
+    ]
 
   def DescribeMatches(self):
     """Provide sentence descriptions of matches.
@@ -186,10 +176,7 @@ class AclCheck:
     Returns:
       ret_str: text sentences describing matches
     """
-    ret_str = []
-    for match in self.matches:
-      text = str(match)
-      ret_str.append(text)
+    ret_str = [str(match) for match in self.matches]
     return '\n'.join(ret_str)
 
   def __str__(self):
@@ -198,15 +185,14 @@ class AclCheck:
     for match in self.matches:
       if match.filter != last_filter:
         last_filter = match.filter
-        text.append('  filter: ' + match.filter)
+        text.append(f'  filter: {match.filter}')
       if match.possibles:
-        text.append(' ' * 10 + 'term: ' + str(match.term) + ' (possible match)')
+        text.extend((
+            ' ' * 10 + 'term: ' + str(match.term) + ' (possible match)',
+            ' ' * 16 + match.action + ' if ' + str(match.possibles),
+        ))
       else:
-        text.append(' ' * 10 + 'term: ' + str(match.term))
-      if match.possibles:
-        text.append(' ' * 16 + match.action + ' if ' + str(match.possibles))
-      else:
-        text.append(' ' * 16 + match.action)
+        text.extend((' ' * 10 + 'term: ' + str(match.term), ' ' * 16 + match.action))
     return '\n'.join(text)
 
   def _PossibleMatch(self, term):
@@ -242,12 +228,7 @@ class AclCheck:
       bool: True of false
     """
     if addr == 'any': return True   # always true if we match for any addr
-    if not addresses: return True   # always true if term has nothing to match
-    for ip in addresses:
-      # ipaddr can incorrectly report ipv4 as contained with ipv6 addrs
-      if addr.subnet_of(ip):
-        return True
-    return False
+    return any(addr.subnet_of(ip) for ip in addresses) if addresses else True
 
   def _PortInside(self, myport, port_list):
     """Check if port matches in a port or group of ports.
@@ -260,9 +241,7 @@ class AclCheck:
       bool: True of false
     """
     if myport == 'any': return True
-    if [x for x in port_list if x[0] <= myport <= x[1]]:
-      return True
-    return False
+    return bool([x for x in port_list if x[0] <= myport <= x[1]])
 
 
 class Match:
@@ -277,13 +256,10 @@ class Match:
 
   def __str__(self):
     text = ''
+    text += f'possible {self.action}' if self.possibles else self.action
+    text += f' in term {self.term} of filter {self.filter}'
     if self.possibles:
-      text += 'possible ' + self.action
-    else:
-      text += self.action
-    text += ' in term ' + self.term + ' of filter ' + self.filter
-    if self.possibles:
-      text += ' with factors: ' + str(', '.join(self.possibles))
+      text += ' with factors: ' + ', '.join(self.possibles)
     return text
 
 

@@ -101,17 +101,16 @@ class TermStandard:
       logging.warning(
           'WARNING: dscp-match is set in filter %s, term %s and may not be '
           'implemented on all IOS version', self.filter_name, self.term.name)
-      self.dscpstring = ' dscp' + self.term.dscp_match
+      self.dscpstring = f' dscp{self.term.dscp_match}'
 
   def __str__(self):
     # Verify platform specific terms. Skip whole term if platform does not
     # match.
-    if self.term.platform:
-      if self.platform not in self.term.platform:
-        return ''
-    if self.term.platform_exclude:
-      if self.platform in self.term.platform_exclude:
-        return ''
+    if self.term.platform and self.platform not in self.term.platform:
+      return ''
+    if (self.term.platform_exclude
+        and self.platform in self.term.platform_exclude):
+      return ''
 
     ret_str = []
 
@@ -127,71 +126,50 @@ class TermStandard:
                     not isinstance(x, nacaddr.IPv6)]
     if self.filter_name.isdigit():
       if self.verbose:
-        ret_str.append('access-list %s remark %s' % (self.filter_name,
-                                                     self.term.name))
+        ret_str.append(f'access-list {self.filter_name} remark {self.term.name}')
         comments = aclgenerator.WrapWords(self.term.comment,
                                           _COMMENT_MAX_WIDTH)
-        for comment in comments:
-          ret_str.append('access-list %s remark %s' % (self.filter_name,
-                                                       comment))
-
+        ret_str.extend(f'access-list {self.filter_name} remark {comment}'
+                       for comment in comments)
       action = _ACTION_TABLE.get(str(self.term.action[0]))
       if v4_addresses:
         for addr in v4_addresses:
           if addr.prefixlen == 32:
-            ret_str.append('access-list %s %s %s%s%s' % (self.filter_name,
-                                                         action,
-                                                         addr.network_address,
-                                                         self.logstring,
-                                                         self.dscpstring))
+            ret_str.append(
+                f'access-list {self.filter_name} {action} {addr.network_address}{self.logstring}{self.dscpstring}'
+            )
           else:
-            ret_str.append('access-list %s %s %s %s%s%s' % (
-                self.filter_name,
-                action,
-                addr.network_address,
-                addr.hostmask,
-                self.logstring,
-                self.dscpstring))
+            ret_str.append(
+                f'access-list {self.filter_name} {action} {addr.network_address} {addr.hostmask}{self.logstring}{self.dscpstring}'
+            )
       else:
-        ret_str.append('access-list %s %s %s%s%s' % (self.filter_name,
-                                                     action,
-                                                     'any',
-                                                     self.logstring,
-                                                     self.dscpstring))
+        ret_str.append(
+            f'access-list {self.filter_name} {action} any{self.logstring}{self.dscpstring}'
+        )
     else:
       if self.verbose:
-        ret_str.append(' remark ' + self.term.name)
+        ret_str.append(f' remark {self.term.name}')
         comments = aclgenerator.WrapWords(self.term.comment,
                                           _COMMENT_MAX_WIDTH)
         if comments and comments[0]:
-          for comment in comments:
-            ret_str.append(' remark ' + str(comment))
-
+          ret_str.extend(f' remark {str(comment)}' for comment in comments)
       action = _ACTION_TABLE.get(str(self.term.action[0]))
       if v4_addresses:
         for addr in v4_addresses:
           if addr.prefixlen == 32:
-            ret_str.append(' %s host %s%s%s' % (action,
-                                                addr.network_address,
-                                                self.logstring,
-                                                self.dscpstring))
+            ret_str.append(
+                f' {action} host {addr.network_address}{self.logstring}{self.dscpstring}'
+            )
           elif self.platform == 'arista':
-            ret_str.append(' %s %s/%s%s%s' % (action,
-                                              addr.network_address,
-                                              addr.prefixlen,
-                                              self.logstring,
-                                              self.dscpstring))
+            ret_str.append(
+                f' {action} {addr.network_address}/{addr.prefixlen}{self.logstring}{self.dscpstring}'
+            )
           else:
-            ret_str.append(' %s %s %s%s%s' % (action,
-                                              addr.network_address,
-                                              addr.hostmask,
-                                              self.logstring,
-                                              self.dscpstring))
+            ret_str.append(
+                f' {action} {addr.network_address} {addr.hostmask}{self.logstring}{self.dscpstring}'
+            )
       else:
-        ret_str.append(' %s %s%s%s' % (action,
-                                       'any',
-                                       self.logstring,
-                                       self.dscpstring))
+        ret_str.append(f' {action} any{self.logstring}{self.dscpstring}')
 
     return '\n'.join(ret_str)
 
@@ -237,41 +215,38 @@ class ObjectGroup:
     netgroups = set()
     ports = {}
 
+    # I don't have an easy way get the token name used in the pol file
+    # w/o reading the pol file twice (with some other library) or doing
+    # some other ugly hackery. Instead, the entire block of source and dest
+    # addresses for a given term is given a unique, computable name which
+    # is not related to the NETWORK.net token name.  that's what you get
+    # for using cisco, which has decided to implement its own meta language.
+
+    # Create network object-groups
+    addr_type = ('source_address', 'destination_address')
+    addr_family = (4, 6)
+
     for term in self.terms:
-      # I don't have an easy way get the token name used in the pol file
-      # w/o reading the pol file twice (with some other library) or doing
-      # some other ugly hackery. Instead, the entire block of source and dest
-      # addresses for a given term is given a unique, computable name which
-      # is not related to the NETWORK.net token name.  that's what you get
-      # for using cisco, which has decided to implement its own meta language.
-
-      # Create network object-groups
-      addr_type = ('source_address', 'destination_address')
-      addr_family = (4, 6)
-
       for source_or_dest in addr_type:
         for family in addr_family:
-          addrs = term.GetAddressOfVersion(source_or_dest, family)
-          if addrs:
+          if addrs := term.GetAddressOfVersion(source_or_dest, family):
             net_def_name = addrs[0].parent_token
             # We have addresses for this family and have not already seen it.
             if (net_def_name, family) not in netgroups:
               netgroups.add((net_def_name, family))
               ret_str.append('object-group network ipv%d %s' % (
                   family, net_def_name))
-              for addr in addrs:
-                ret_str.append(' %s/%s' % (addr.network_address,
-                                           addr.prefixlen))
+              ret_str.extend(f' {addr.network_address}/{addr.prefixlen}' for addr in addrs)
               ret_str.append('exit\n')
 
       # Create port object-groups
       for port in term.source_port + term.destination_port:
         if not port:
           continue
-        port_key = '%s-%s' % (port[0], port[1])
+        port_key = f'{port[0]}-{port[1]}'
         if port_key not in ports:
           ports[port_key] = True
-          ret_str.append('object-group port %s' % port_key)
+          ret_str.append(f'object-group port {port_key}')
           if port[0] != port[1]:
             ret_str.append(' range %d %d' % (port[0], port[1]))
           else:
@@ -463,10 +438,7 @@ class Term(aclgenerator.Term):
     # Our caller should have already verified the address family.
     assert af in (4, 6)
     self.af = af
-    if af == 4:
-      self.text_af = 'inet'
-    else:
-      self.text_af = 'inet6'
+    self.text_af = 'inet' if af == 4 else 'inet6'
 
   def __str__(self):
     # Verify platform specific terms. Skip whole term if platform does not

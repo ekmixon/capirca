@@ -52,16 +52,15 @@ def IP(ip, comment='', token='', strict=True):
 
 # TODO(robankeny) remove once at 3.7
 @staticmethod
-def _is_subnet_of(a, b):  # pylint: disable=invalid-name
+def _is_subnet_of(a, b):# pylint: disable=invalid-name
   try:
     # Always false if one is v4 and the other is v6.
     if a.version != b.version:
-      raise TypeError('%s and %s are not of the same version' % (a, b))
+      raise TypeError(f'{a} and {b} are not of the same version')
     return (b.network_address <= a.network_address and
             b.broadcast_address >= a.broadcast_address)
   except AttributeError:
-    raise TypeError(
-        'Unable to test subnet containment between %s and %s' % (a, b))
+    raise TypeError(f'Unable to test subnet containment between {a} and {b}')
 
 
 class IPv4(ipaddress.IPv4Network):
@@ -109,7 +108,7 @@ class IPv4(ipaddress.IPv4Network):
     """
     if self.text:
       if comment and comment not in self.text:
-        self.text += ', ' + comment
+        self.text += f', {comment}'
     else:
       self.text = comment
 
@@ -134,9 +133,11 @@ class IPv4(ipaddress.IPv4Network):
       raise PrefixlenDiffInvalidError(
           'current prefixlen is %d, cannot have a prefixlen_diff of %d' % (
               self.prefixlen, prefixlen_diff))
-    ret_addr = IPv4(ipaddress.IPv4Network.supernet(self, prefixlen_diff),
-                    comment=self.text, token=self.token)
-    return ret_addr
+    return IPv4(
+        ipaddress.IPv4Network.supernet(self, prefixlen_diff),
+        comment=self.text,
+        token=self.token,
+    )
 
   # Backwards compatibility name from v1.
   Supernet = supernet
@@ -198,9 +199,11 @@ class IPv6(ipaddress.IPv6Network):
       raise PrefixlenDiffInvalidError(
           'current prefixlen is %d, cannot have a prefixlen_diff of %d' % (
               self.prefixlen, prefixlen_diff))
-    ret_addr = IPv6(ipaddress.IPv6Network.supernet(self, prefixlen_diff),
-                    comment=self.text, token=self.token)
-    return ret_addr
+    return IPv6(
+        ipaddress.IPv6Network.supernet(self, prefixlen_diff),
+        comment=self.text,
+        token=self.token,
+    )
 
   # Backwards compatibility name from v1.
   Supernet = supernet
@@ -216,7 +219,7 @@ class IPv6(ipaddress.IPv6Network):
     """
     if self.text:
       if comment and comment not in self.text:
-        self.text += ', ' + comment
+        self.text += f', {comment}'
     else:
       self.text = comment
 
@@ -226,18 +229,12 @@ IPType = Union[IPv4, IPv6]
 
 def _InNetList(adders, ip):
   """Returns True if ip is contained in adders."""
-  for addr in adders:
-    if ip.subnet_of(addr):
-      return True
-  return False
+  return any(ip.subnet_of(addr) for addr in adders)
 
 
 def IsSuperNet(supernets, subnets):
   """Returns True if subnets are fully consumed by supernets."""
-  for net in subnets:
-    if not _InNetList(supernets, net):
-      return False
-  return True
+  return all(_InNetList(supernets, net) for net in subnets)
 
 
 def CollapseAddrListPreserveTokens(addresses):
@@ -249,10 +246,12 @@ def CollapseAddrListPreserveTokens(addresses):
   Returns:
     list of ipaddress.IPNetwork objects.
   """
-  ret_array = []
-  for grp in itertools.groupby(sorted(addresses, key=lambda x: x.parent_token),
-                               lambda x: x.parent_token):
-    ret_array.append(CollapseAddrList(list(grp[1])))
+  ret_array = [
+      CollapseAddrList(list(grp[1])) for grp in itertools.groupby(
+          sorted(addresses, key=lambda x: x.parent_token),
+          lambda x: x.parent_token,
+      )
+  ]
   dedup_array = []
   i = 0
   while len(ret_array) > i:
@@ -287,10 +286,9 @@ def _SafeToMerge(address, merge_target, check_addresses):
   Returns:
     True if safe to merge, False otherwise.
   """
-  for check_address in check_addresses.get(address.network_address, []):
-    if merge_target.netmask <= check_address.netmask < address.netmask:
-      return False
-  return True
+  return all(
+      merge_target.netmask <= check_address.netmask < address.netmask
+      for check_address in check_addresses.get(address.network_address, []))
 
 
 def _CollapseAddrListInternal(addresses, complements_by_network):
@@ -380,7 +378,7 @@ def CollapseAddrList(addresses, complement_addresses=None):
     list of ipaddress.IPNetwork objects
   """
   complements_dict = collections.defaultdict(list)
-  address_set = set([a.network_address for a in addresses])
+  address_set = {a.network_address for a in addresses}
   for ca in complement_addresses or []:
     if ca.network_address in address_set:
       complements_dict[ca.network_address].append(ca)
@@ -455,7 +453,3 @@ ExcludeAddrs = AddressListExclude
 
 class PrefixlenDiffInvalidError(ipaddress.NetmaskValueError):
   """Holdover from ipaddr v1."""
-
-
-if __name__ == '__main__':
-  pass

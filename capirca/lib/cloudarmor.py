@@ -251,8 +251,9 @@ class CloudArmor(aclgenerator.ACLGenerator):
   def __str__(self):
     """Return the JSON blob for CloudArmor."""
 
-    out = '%s\n\n' % (
-        json.dumps(self.cloudarmor_policies, indent=2,
-                   separators=(six.ensure_str(','), six.ensure_str(': ')),
-                   sort_keys=True))
-    return out
+    return '%s\n\n' % (json.dumps(
+        self.cloudarmor_policies,
+        indent=2,
+        separators=(six.ensure_str(','), six.ensure_str(': ')),
+        sort_keys=True,
+    ))
